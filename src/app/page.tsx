@@ -157,7 +157,7 @@ export default function HomePage() {
               </p>
 
               <p className="mt-2 text-sm leading-6 text-white">
-                <b>Note:</b> The latest submission before the deadline counts.
+                <b>Note:</b> You can submit multiple times. Only the latest submission before the deadline counts.
               </p>
 
               <div className="mt-8 grid max-w-xl gap-4 sm:grid-cols-2">
