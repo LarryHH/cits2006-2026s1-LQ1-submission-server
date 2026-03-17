@@ -189,9 +189,6 @@ export default function HomePage() {
                 <p className="mt-2 text-sm leading-6 text-zinc-400">
                   Fill in all fields exactly as required.
                 </p>
-                <p className="mt-1 text-sm leading-6 text-zinc-500">
-                  The latest submission before the deadline counts.
-                </p>
               </div>
 
               <form onSubmit={onSubmit} className="space-y-4">
