@@ -144,11 +144,11 @@ export default function HomePage() {
           <section className="flex flex-col justify-center">
             <div className="max-w-2xl">
               <div className="mb-4 inline-flex rounded-full border border-zinc-800 bg-zinc-900/80 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-zinc-400">
-                CITS2006 Lab Quiz
+                CITS2006 Lab Quiz 1, S1 2026
               </div>
 
               <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                Lab Quiz Submission
+                Lab Quiz 1 Submission
               </h1>
 
               <p className="mt-5 max-w-xl text-base leading-7 text-zinc-400 sm:text-lg">
