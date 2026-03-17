@@ -1,20 +1,34 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import AdminDashboard from './AdminDashboard';
 
-async function getData() {
+type SubmissionRow = {
+  id: number;
+  submitted_at: string;
+  student_id: string;
+  public_key: string;
+  private_key: string;
+  submitted_signature: string;
+  expected_signature: string;
+  is_correct: boolean;
+};
+
+async function getData(): Promise<SubmissionRow[]> {
   const supabase = getSupabaseAdmin();
 
   const { data, error } = await supabase
     .from('submissions')
-    .select('id, submitted_at, student_id, submitted_signature, is_correct')
+    .select(
+      'id, submitted_at, student_id, public_key, private_key, submitted_signature, expected_signature, is_correct'
+    )
     .order('submitted_at', { ascending: false });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return data ?? [];
+  return (data ?? []) as SubmissionRow[];
 }
 
 export default async function AdminPage() {
@@ -31,61 +45,35 @@ export default async function AdminPage() {
   }
 
   const rows = await getData();
-  const total = rows.length;
-  const correct = rows.filter((r) => r.is_correct).length;
-  const incorrect = total - correct;
 
   return (
-    <main className="min-h-screen bg-gray-100 p-6">
-      <div className="mx-auto max-w-6xl rounded-xl bg-white p-6 shadow">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <h1 className="text-3xl font-semibold">Facilitator Dashboard</h1>
+    <main className="min-h-screen bg-[#0b0b0c] text-zinc-100">
+      <div className="mx-auto max-w-7xl px-6 py-10">
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="mb-3 inline-flex rounded-full border border-zinc-800 bg-zinc-900/80 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-zinc-400">
+              Facilitator Dashboard
+            </div>
+            <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+              Lab Quiz Submissions
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400 sm:text-base">
+              Review all recorded submissions. The latest submission before the
+              deadline counts.
+            </p>
+          </div>
+
           <form action="/admin/logout" method="post">
             <button
               type="submit"
-              className="rounded-lg bg-gray-200 px-4 py-2 text-sm font-medium"
+              className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
             >
               Logout
             </button>
           </form>
         </div>
 
-        <div className="mb-6 flex flex-wrap gap-3">
-          <div className="rounded-lg bg-gray-100 px-4 py-3 font-medium">
-            Total: {total}
-          </div>
-          <div className="rounded-lg bg-gray-100 px-4 py-3 font-medium">
-            Correct: {correct}
-          </div>
-          <div className="rounded-lg bg-gray-100 px-4 py-3 font-medium">
-            Incorrect: {incorrect}
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="px-3 py-2 text-left">Time</th>
-                <th className="px-3 py-2 text-left">Student ID</th>
-                <th className="px-3 py-2 text-left">Signature</th>
-                <th className="px-3 py-2 text-left">Correct</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="border-b align-top">
-                  <td className="px-3 py-2">
-                    {new Date(row.submitted_at).toLocaleString()}
-                  </td>
-                  <td className="px-3 py-2">{row.student_id}</td>
-                  <td className="px-3 py-2">{row.submitted_signature}</td>
-                  <td className="px-3 py-2">{row.is_correct ? 'Yes' : 'No'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <AdminDashboard rows={rows} />
       </div>
     </main>
   );
