@@ -1,7 +1,13 @@
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
-import { getSupabaseAdmin } from '@/lib/supabase';
-import AdminDashboard from './AdminDashboard';
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { getSupabaseAdmin } from "@/lib/supabase";
+import AdminDashboard from "./AdminDashboard";
+
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Admin Dashboard",
+};
 
 type SubmissionRow = {
   id: number;
@@ -18,11 +24,11 @@ async function getData(): Promise<SubmissionRow[]> {
   const supabase = getSupabaseAdmin();
 
   const { data, error } = await supabase
-    .from('submissions')
+    .from("submissions")
     .select(
-      'id, submitted_at, student_id, public_key, private_key, submitted_signature, expected_signature, is_correct'
+      "id, submitted_at, student_id, public_key, private_key, submitted_signature, expected_signature, is_correct",
     )
-    .order('submitted_at', { ascending: false });
+    .order("submitted_at", { ascending: false });
 
   if (error) {
     throw new Error(error.message);
@@ -34,14 +40,14 @@ async function getData(): Promise<SubmissionRow[]> {
 export default async function AdminPage() {
   const expected = process.env.ADMIN_PASSWORD;
   if (!expected) {
-    throw new Error('Missing ADMIN_PASSWORD');
+    throw new Error("Missing ADMIN_PASSWORD");
   }
 
   const cookieStore = await cookies();
-  const adminCookie = cookieStore.get('admin_auth')?.value;
+  const adminCookie = cookieStore.get("admin_auth")?.value;
 
   if (adminCookie !== expected) {
-    redirect('/admin/login');
+    redirect("/admin/login");
   }
 
   const rows = await getData();

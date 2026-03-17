@@ -1,5 +1,11 @@
 import { loginAdmin } from './actions';
 
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Admin Login",
+};
+
 export default async function AdminLoginPage({
   searchParams,
 }: {
