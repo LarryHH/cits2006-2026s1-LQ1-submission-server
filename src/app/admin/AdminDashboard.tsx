@@ -66,6 +66,12 @@ function sortIndicator(
 
 export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
   const [search, setSearch] = useState("");
+  const [countFilter, setCountFilter] = useState<"all" | "counted" | "old">(
+    "all",
+  );
+  const [correctnessFilter, setCorrectnessFilter] = useState<
+    "all" | "correct" | "incorrect"
+  >("all");
   const [sortField, setSortField] = useState<SortField>("submitted_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [popover, setPopover] = useState<PopoverState>(null);
@@ -80,13 +86,26 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
   const uniqueStudents = latestRows.length;
   const countedCorrect = latestRows.filter((r) => r.is_correct).length;
   const countedIncorrect = latestRows.filter((r) => !r.is_correct).length;
-
   const filteredRows = useMemo(() => {
     const q = search.trim();
 
     let out = rows;
     if (q) {
       out = rows.filter((row) => row.student_id.includes(q));
+    }
+
+    if (countFilter !== "all") {
+      out = out.filter((row) => {
+        const countedRow = latestByStudent.get(row.student_id);
+        const isCounted = countedRow?.id === row.id;
+        return countFilter === "counted" ? isCounted : !isCounted;
+      });
+    }
+
+    if (correctnessFilter !== "all") {
+      out = out.filter((row) =>
+        correctnessFilter === "correct" ? row.is_correct : !row.is_correct,
+      );
     }
 
     out = [...out].sort((a, b) => {
@@ -101,7 +120,15 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
     });
 
     return out;
-  }, [rows, search, sortField, sortDir]);
+  }, [
+    rows,
+    search,
+    countFilter,
+    correctnessFilter,
+    sortField,
+    sortDir,
+    latestByStudent,
+  ]);
 
   function toggleSort(field: SortField) {
     if (field === sortField) {
@@ -191,7 +218,12 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
         </div>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-3 text-sm text-zinc-400">
+        Rows marked <span className="font-medium text-zinc-200">Counted</span>{" "}
+        are the latest submissions for each student and are the ones that
+        currently count.
+      </div>
+      <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <input
           type="text"
           value={search}
@@ -201,12 +233,84 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
           placeholder="Search student ID..."
           className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-600/40"
         />
-      </div>
 
-      <div className="mb-3 text-sm text-zinc-400">
-        Rows marked <span className="font-medium text-zinc-200">Counted</span>{" "}
-        are the latest submissions for each student and are the ones that
-        currently count.
+        <div className="flex flex-wrap items-center gap-8">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setCountFilter("all")}
+              className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                countFilter === "all"
+                  ? "border-white bg-white text-black"
+                  : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+              }`}
+            >
+              All rows
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setCountFilter("counted")}
+              className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                countFilter === "counted"
+                  ? "border-blue-300 bg-blue-300 text-black"
+                  : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+              }`}
+            >
+              Counted only
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setCountFilter("old")}
+              className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                countFilter === "old"
+                  ? "border-zinc-300 bg-zinc-300 text-black"
+                  : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+              }`}
+            >
+              Old only
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setCorrectnessFilter("all")}
+              className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                correctnessFilter === "all"
+                  ? "border-white bg-white text-black"
+                  : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+              }`}
+            >
+              All results
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setCorrectnessFilter("correct")}
+              className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                correctnessFilter === "correct"
+                  ? "border-emerald-300 bg-emerald-300 text-black"
+                  : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+              }`}
+            >
+              Correct only
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setCorrectnessFilter("incorrect")}
+              className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                correctnessFilter === "incorrect"
+                  ? "border-red-300 bg-red-300 text-black"
+                  : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+              }`}
+            >
+              Incorrect only
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950/90 shadow-2xl shadow-black/30">
