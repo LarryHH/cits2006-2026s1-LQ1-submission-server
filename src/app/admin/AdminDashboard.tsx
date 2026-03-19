@@ -1,20 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { SubmissionRow } from "./page";
 
-type SubmissionRow = {
-  id: number;
-  submitted_at: string;
-  student_id: string;
-  public_key: string;
-  private_key: string;
-  submitted_signature: string;
-  expected_signature: string;
-  is_correct: boolean;
-};
-
-type SortField = "submitted_at" | "student_id";
+type SortField = "submitted_at" | "student_id" | "task_number";
 type SortDir = "asc" | "desc";
+
+type CountFilter = "all" | "counted" | "old";
+type ValidityFilter = "all" | "valid" | "invalid";
+type TaskFilter = "all" | "1" | "2";
 
 type PopoverState = {
   rowId: number;
@@ -25,13 +19,17 @@ type PopoverState = {
   y: number;
 } | null;
 
-function truncateCell(value: string, head = 6) {
+function truncateCell(value: string, head = 16) {
   if (!value) return "";
   if (value.length <= head) return value;
   return `${value.slice(0, head)}...`;
 }
 
-function getLatestByStudent(rows: SubmissionRow[]) {
+function countedKey(row: SubmissionRow) {
+  return `${row.student_id}::${row.task_number}`;
+}
+
+function getLatestByStudentAndTask(rows: SubmissionRow[]) {
   const latestMap = new Map<string, SubmissionRow>();
 
   const rowsByLatestTime = [...rows].sort((a, b) => {
@@ -41,8 +39,9 @@ function getLatestByStudent(rows: SubmissionRow[]) {
   });
 
   for (const row of rowsByLatestTime) {
-    if (!latestMap.has(row.student_id)) {
-      latestMap.set(row.student_id, row);
+    const key = countedKey(row);
+    if (!latestMap.has(key)) {
+      latestMap.set(key, row);
     }
   }
 
@@ -64,53 +63,97 @@ function sortIndicator(
   );
 }
 
+function taskLabel(taskNumber: 1 | 2) {
+  return taskNumber === 1 ? "Task 1" : "Task 2";
+}
+
+function stageLabel(stage: string | null) {
+  if (!stage) return "—";
+
+  const map: Record<string, string> = {
+    task1_signature: "Task 1 signature",
+    task2_signature: "Task 2 signature",
+    certificate_signature: "Certificate signature",
+    certificate_student_id: "Certificate student ID",
+    student_public_key_parse: "Student public key parse",
+    student_private_key_parse: "Student private key parse",
+    student_key_pair_match: "Student key pair match",
+    ca_public_key_parse: "CA public key parse",
+    ca_private_key_parse: "CA private key parse",
+    ca_key_pair_match: "CA key pair match",
+    task1_internal: "Task 1 internal",
+    task2_internal: "Task 2 internal",
+    student_id: "Student ID",
+  };
+
+  return map[stage] ?? stage;
+}
+
+function safeValue(value: string | null | undefined) {
+  return value ?? "";
+}
+
 export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
   const [search, setSearch] = useState("");
-  const [countFilter, setCountFilter] = useState<"all" | "counted" | "old">(
-    "all",
-  );
-  const [correctnessFilter, setCorrectnessFilter] = useState<
-    "all" | "correct" | "incorrect"
-  >("all");
+  const [countFilter, setCountFilter] = useState<CountFilter>("all");
+  const [validityFilter, setValidityFilter] = useState<ValidityFilter>("all");
+  const [taskFilter, setTaskFilter] = useState<TaskFilter>("all");
   const [sortField, setSortField] = useState<SortField>("submitted_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [popover, setPopover] = useState<PopoverState>(null);
 
-  const latestByStudent = useMemo(() => getLatestByStudent(rows), [rows]);
-  const latestRows = useMemo(
-    () => Array.from(latestByStudent.values()),
-    [latestByStudent],
+  const latestByStudentAndTask = useMemo(
+    () => getLatestByStudentAndTask(rows),
+    [rows],
+  );
+
+  const countedRows = useMemo(
+    () => Array.from(latestByStudentAndTask.values()),
+    [latestByStudentAndTask],
   );
 
   const totalSubmissions = rows.length;
-  const uniqueStudents = latestRows.length;
-  const countedCorrect = latestRows.filter((r) => r.is_correct).length;
-  const countedIncorrect = latestRows.filter((r) => !r.is_correct).length;
+  const countedTask1 = countedRows.filter((r) => r.task_number === 1).length;
+  const countedTask2 = countedRows.filter((r) => r.task_number === 2).length;
+  const countedValid = countedRows.filter((r) => r.is_valid).length;
+  const countedInvalid = countedRows.filter((r) => !r.is_valid).length;
+
   const filteredRows = useMemo(() => {
     const q = search.trim();
 
     let out = rows;
+
     if (q) {
-      out = rows.filter((row) => row.student_id.includes(q));
+      out = out.filter((row) => row.student_id.includes(q));
+    }
+
+    if (taskFilter !== "all") {
+      const taskNum = Number(taskFilter);
+      out = out.filter((row) => row.task_number === taskNum);
     }
 
     if (countFilter !== "all") {
       out = out.filter((row) => {
-        const countedRow = latestByStudent.get(row.student_id);
+        const countedRow = latestByStudentAndTask.get(countedKey(row));
         const isCounted = countedRow?.id === row.id;
         return countFilter === "counted" ? isCounted : !isCounted;
       });
     }
 
-    if (correctnessFilter !== "all") {
+    if (validityFilter !== "all") {
       out = out.filter((row) =>
-        correctnessFilter === "correct" ? row.is_correct : !row.is_correct,
+        validityFilter === "valid" ? row.is_valid : !row.is_valid,
       );
     }
 
     out = [...out].sort((a, b) => {
       if (sortField === "student_id") {
         const cmp = a.student_id.localeCompare(b.student_id);
+        return sortDir === "asc" ? cmp : -cmp;
+      }
+
+      if (sortField === "task_number") {
+        const cmp = a.task_number - b.task_number;
         return sortDir === "asc" ? cmp : -cmp;
       }
 
@@ -124,10 +167,11 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
     rows,
     search,
     countFilter,
-    correctnessFilter,
+    validityFilter,
+    taskFilter,
     sortField,
     sortDir,
-    latestByStudent,
+    latestByStudentAndTask,
   ]);
 
   function toggleSort(field: SortField) {
@@ -135,7 +179,9 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortField(field);
-      setSortDir(field === "student_id" ? "asc" : "desc");
+      setSortDir(
+        field === "student_id" || field === "task_number" ? "asc" : "desc",
+      );
     }
   }
 
@@ -159,20 +205,29 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
   }
 
   function renderPopoverCell(
-    eLabel: string,
+    label: string,
     rowId: number,
     field: string,
-    value: string,
+    value: string | null,
+    maxWidth = "max-w-[160px]",
   ) {
+    const safe = safeValue(value);
+
+    if (!safe) {
+      return <span className="text-zinc-500">—</span>;
+    }
+
     return (
       <button
         type="button"
-        onClick={(e) => openPopover(e, rowId, field, eLabel, value)}
-        className="max-w-[120px] text-left font-mono text-zinc-300 transition hover:text-white"
+        onClick={(e) => openPopover(e, rowId, field, label, safe)}
+        className={`${maxWidth} text-left font-mono text-zinc-300 transition hover:text-white`}
         title="Click to view full value"
       >
-        <span className="block max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap">
-          {truncateCell(value)}
+        <span
+          className={`block ${maxWidth} overflow-hidden text-ellipsis whitespace-nowrap`}
+        >
+          {truncateCell(safe)}
         </span>
       </button>
     );
@@ -180,7 +235,7 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
 
   return (
     <>
-      <div className="mb-8 grid gap-4 sm:grid-cols-4">
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-5">
           <div className="text-sm font-medium text-zinc-400">
             Total submissions
@@ -192,37 +247,46 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-5">
           <div className="text-sm font-medium text-zinc-400">
-            Unique students
+            Counted Task 1
           </div>
           <div className="mt-2 text-3xl font-semibold text-white">
-            {uniqueStudents}
+            {countedTask1}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-5">
+          <div className="text-sm font-medium text-zinc-400">
+            Counted Task 2
+          </div>
+          <div className="mt-2 text-3xl font-semibold text-white">
+            {countedTask2}
           </div>
         </div>
 
         <div className="rounded-2xl border border-emerald-900/60 bg-emerald-950/30 p-5">
           <div className="text-sm font-medium text-emerald-300">
-            Counted correct
+            Counted valid
           </div>
           <div className="mt-2 text-3xl font-semibold text-emerald-200">
-            {countedCorrect}
+            {countedValid}
           </div>
         </div>
 
         <div className="rounded-2xl border border-red-900/60 bg-red-950/30 p-5">
           <div className="text-sm font-medium text-red-300">
-            Counted incorrect
+            Counted invalid
           </div>
           <div className="mt-2 text-3xl font-semibold text-red-200">
-            {countedIncorrect}
+            {countedInvalid}
           </div>
         </div>
       </div>
 
       <div className="mb-3 text-sm text-zinc-400">
         Rows marked <span className="font-medium text-zinc-200">Counted</span>{" "}
-        are the latest submissions for each student and are the ones that
-        currently count.
+        are the latest submissions for each student and task.
       </div>
+
       <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <input
           type="text"
@@ -234,87 +298,43 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
           className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-600/40"
         />
 
-        <div className="flex flex-wrap items-center gap-8">
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setCountFilter("all")}
-              className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                countFilter === "all"
-                  ? "border-white bg-white text-black"
-                  : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
-              }`}
-            >
-              All rows
-            </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={taskFilter}
+            onChange={(e) => setTaskFilter(e.target.value as TaskFilter)}
+            className="min-w-[150px] rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-600/40"
+          >
+            <option value="all">All tasks</option>
+            <option value="1">Task 1</option>
+            <option value="2">Task 2</option>
+          </select>
 
-            <button
-              type="button"
-              onClick={() => setCountFilter("counted")}
-              className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                countFilter === "counted"
-                  ? "border-blue-300 bg-blue-300 text-black"
-                  : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
-              }`}
-            >
-              Counted only
-            </button>
+          <select
+            value={countFilter}
+            onChange={(e) => setCountFilter(e.target.value as CountFilter)}
+            className="min-w-[150px] rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-600/40"
+          >
+            <option value="all">All rows</option>
+            <option value="counted">Counted only</option>
+            <option value="old">Old only</option>
+          </select>
 
-            <button
-              type="button"
-              onClick={() => setCountFilter("old")}
-              className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                countFilter === "old"
-                  ? "border-zinc-300 bg-zinc-300 text-black"
-                  : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
-              }`}
-            >
-              Old only
-            </button>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setCorrectnessFilter("all")}
-              className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                correctnessFilter === "all"
-                  ? "border-white bg-white text-black"
-                  : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
-              }`}
-            >
-              All results
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setCorrectnessFilter("correct")}
-              className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                correctnessFilter === "correct"
-                  ? "border-emerald-300 bg-emerald-300 text-black"
-                  : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
-              }`}
-            >
-              Correct only
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setCorrectnessFilter("incorrect")}
-              className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                correctnessFilter === "incorrect"
-                  ? "border-red-300 bg-red-300 text-black"
-                  : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
-              }`}
-            >
-              Incorrect only
-            </button>
-          </div>
+          <select
+            value={validityFilter}
+            onChange={(e) =>
+              setValidityFilter(e.target.value as ValidityFilter)
+            }
+            className="min-w-[150px] rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-600/40"
+          >
+            <option value="all">All results</option>
+            <option value="valid">Valid only</option>
+            <option value="invalid">Invalid only</option>
+          </select>
         </div>
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950/90 shadow-2xl shadow-black/30">
-        <div className="overflow-x-auto">
+        <div className="custom-scrollbar overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-zinc-900/80">
               <tr className="border-b border-zinc-800">
@@ -336,6 +356,17 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
                 <th className="px-4 py-3 text-left font-medium text-zinc-300">
                   <button
                     type="button"
+                    onClick={() => toggleSort("task_number")}
+                    className="inline-flex items-center transition hover:text-white"
+                  >
+                    Task
+                    {sortIndicator("task_number", sortField, sortDir)}
+                  </button>
+                </th>
+
+                <th className="px-4 py-3 text-left font-medium text-zinc-300">
+                  <button
+                    type="button"
                     onClick={() => toggleSort("submitted_at")}
                     className="inline-flex items-center transition hover:text-white"
                   >
@@ -345,11 +376,39 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
                 </th>
 
                 <th className="px-4 py-3 text-left font-medium text-zinc-300">
-                  Public Key
+                  Result
                 </th>
 
                 <th className="px-4 py-3 text-left font-medium text-zinc-300">
-                  Private Key
+                  Verification Stage
+                </th>
+
+                <th className="px-4 py-3 text-left font-medium text-zinc-300">
+                  Prefix Used
+                </th>
+
+                <th className="px-4 py-3 text-left font-medium text-zinc-300">
+                  Message Used
+                </th>
+
+                <th className="px-4 py-3 text-left font-medium text-zinc-300">
+                  Student Public Key
+                </th>
+
+                <th className="px-4 py-3 text-left font-medium text-zinc-300">
+                  Student Private Key
+                </th>
+
+                <th className="px-4 py-3 text-left font-medium text-zinc-300">
+                  CA Public Key
+                </th>
+
+                <th className="px-4 py-3 text-left font-medium text-zinc-300">
+                  CA Private Key
+                </th>
+
+                <th className="px-4 py-3 text-left font-medium text-zinc-300">
+                  Certificate Data
                 </th>
 
                 <th className="px-4 py-3 text-left font-medium text-zinc-300">
@@ -357,18 +416,22 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
                 </th>
 
                 <th className="px-4 py-3 text-left font-medium text-zinc-300">
-                  Expected Signature
+                  Task 1 Expected Signature
                 </th>
 
                 <th className="px-4 py-3 text-left font-medium text-zinc-300">
-                  Correct
+                  Task 2 Certificate Signature
+                </th>
+
+                <th className="px-4 py-3 text-left font-medium text-zinc-300">
+                  Task 2 Expected Certificate Signature
                 </th>
               </tr>
             </thead>
 
             <tbody>
               {filteredRows.map((row) => {
-                const countedRow = latestByStudent.get(row.student_id);
+                const countedRow = latestByStudentAndTask.get(countedKey(row));
                 const isCounted = countedRow?.id === row.id;
 
                 return (
@@ -393,55 +456,144 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3 text-zinc-300">
+                      {taskLabel(row.task_number)}
+                    </td>
+
+                    <td className="whitespace-nowrap px-4 py-3 text-zinc-300">
                       {new Date(row.submitted_at).toLocaleString()}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {renderPopoverCell(
-                        "Public Key",
-                        row.id,
-                        "public_key",
-                        row.public_key,
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {renderPopoverCell(
-                        "Private Key",
-                        row.id,
-                        "private_key",
-                        row.private_key,
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {renderPopoverCell(
-                        "Submitted Signature",
-                        row.id,
-                        "submitted_signature",
-                        row.submitted_signature,
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {renderPopoverCell(
-                        "Expected Signature",
-                        row.id,
-                        "expected_signature",
-                        row.expected_signature,
-                      )}
                     </td>
 
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                          row.is_correct
+                          row.is_valid
                             ? "bg-emerald-950/70 text-emerald-300 ring-1 ring-emerald-900"
                             : "bg-red-950/70 text-red-300 ring-1 ring-red-900"
                         }`}
                       >
-                        {row.is_correct ? "Yes" : "No"}
+                        {row.is_valid ? "Valid" : "Invalid"}
                       </span>
+                    </td>
+
+                    <td className="px-4 py-3 text-zinc-300">
+                      {stageLabel(row.verification_stage)}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {renderPopoverCell(
+                        "Prefix Used",
+                        row.id,
+                        "message_prefix_used",
+                        row.message_prefix_used,
+                        "max-w-[130px]",
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {renderPopoverCell(
+                        "Message Used",
+                        row.id,
+                        "message_used",
+                        row.message_used,
+                        "max-w-[160px]",
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {renderPopoverCell(
+                        "Student Public Key",
+                        row.id,
+                        "student_public_key_pem",
+                        row.student_public_key_pem,
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {renderPopoverCell(
+                        "Student Private Key",
+                        row.id,
+                        "student_private_key_pem",
+                        row.student_private_key_pem,
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {renderPopoverCell(
+                        "CA Public Key",
+                        row.id,
+                        "ca_public_key_pem",
+                        row.ca_public_key_pem,
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {renderPopoverCell(
+                        "CA Private Key",
+                        row.id,
+                        "ca_private_key_pem",
+                        row.ca_private_key_pem,
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {renderPopoverCell(
+                        "Certificate Data",
+                        row.id,
+                        "certificate_data_text",
+                        row.certificate_data_text,
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {row.task_number === 1 ? (
+                        renderPopoverCell(
+                          "Submitted Signature",
+                          row.id,
+                          "submitted_signature_text",
+                          row.submitted_signature_text,
+                        )
+                      ) : (
+                        <span className="text-zinc-500">—</span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {row.task_number === 1 ? (
+                        renderPopoverCell(
+                          "Expected Task 1 Signature",
+                          row.id,
+                          "expected_task1_signature_text",
+                          row.expected_task1_signature_text,
+                        )
+                      ) : (
+                        <span className="text-zinc-500">—</span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {row.task_number === 2 ? (
+                        renderPopoverCell(
+                          "Certificate Signature",
+                          row.id,
+                          "certificate_signature_text",
+                          row.certificate_signature_text,
+                        )
+                      ) : (
+                        <span className="text-zinc-500">—</span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {row.task_number === 2 ? (
+                        renderPopoverCell(
+                          "Expected Task 2 Certificate Signature",
+                          row.id,
+                          "expected_task2_certificate_signature_text",
+                          row.expected_task2_certificate_signature_text,
+                        )
+                      ) : (
+                        <span className="text-zinc-500">—</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -450,7 +602,7 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
               {filteredRows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={17}
                     className="px-4 py-10 text-center text-zinc-500"
                   >
                     No matching submissions.
@@ -490,7 +642,9 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
             </div>
 
             <div className="custom-scrollbar max-h-[320px] overflow-auto rounded-xl border border-zinc-800 bg-zinc-900/70 p-3 font-mono text-sm leading-6 text-zinc-200">
-              <span className="break-all">{popover.value}</span>
+              <span className="break-all whitespace-pre-wrap">
+                {popover.value}
+              </span>
             </div>
           </div>
         </>

@@ -9,15 +9,27 @@ export const metadata: Metadata = {
   title: "Admin Dashboard",
 };
 
-type SubmissionRow = {
+export type SubmissionRow = {
   id: number;
   submitted_at: string;
   student_id: string;
-  public_key: string;
-  private_key: string;
-  submitted_signature: string;
-  expected_signature: string;
-  is_correct: boolean;
+  task_number: 1 | 2;
+  message_prefix_used: string;
+  message_used: string;
+  is_valid: boolean;
+  verification_stage: string | null;
+  verification_message: string | null;
+  raw_error: string | null;
+  student_public_key_pem: string | null;
+  ca_public_key_pem: string | null;
+  student_private_key_pem: string | null;
+  ca_private_key_pem: string | null;
+  expected_task1_signature_text: string | null;
+  expected_task2_certificate_signature_text: string | null;
+  certificate_data_text: string | null;
+  submitted_signature_text: string | null;
+  certificate_signature_text: string | null;
+  certificate_encoding_used: string | null;
 };
 
 async function getData(): Promise<SubmissionRow[]> {
@@ -26,7 +38,28 @@ async function getData(): Promise<SubmissionRow[]> {
   const { data, error } = await supabase
     .from("submissions")
     .select(
-      "id, submitted_at, student_id, public_key, private_key, submitted_signature, expected_signature, is_correct",
+      `
+        id,
+        submitted_at,
+        student_id,
+        task_number,
+        message_prefix_used,
+        message_used,
+        is_valid,
+        verification_stage,
+        verification_message,
+        raw_error,
+        student_public_key_pem,
+        ca_public_key_pem,
+        student_private_key_pem,
+        ca_private_key_pem,
+        expected_task1_signature_text,
+        expected_task2_certificate_signature_text,
+        certificate_data_text,
+        submitted_signature_text,
+        certificate_signature_text,
+        certificate_encoding_used
+      `,
     )
     .order("submitted_at", { ascending: false });
 
@@ -64,19 +97,28 @@ export default async function AdminPage() {
               Lab Quiz Submissions
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400 sm:text-base">
-              Review all recorded submissions. The latest submission before the
-              deadline counts.
+              Review all recorded submissions. The latest submission for each
+              student and task is the one that currently counts.
             </p>
           </div>
 
-          <form action="/admin/logout" method="post">
-            <button
-              type="submit"
+          <div className="flex items-center gap-3">
+            <a
+              href="/admin/settings"
               className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
             >
-              Logout
-            </button>
-          </form>
+              Lab Settings
+            </a>
+
+            <form action="/admin/logout" method="post">
+              <button
+                type="submit"
+                className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
+              >
+                Logout
+              </button>
+            </form>
+          </div>
         </div>
 
         <AdminDashboard rows={rows} />

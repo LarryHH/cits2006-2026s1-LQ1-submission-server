@@ -1,34 +1,163 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
+
+type MessageType = "success" | "error" | "warning" | null;
+type TaskNumber = "1" | "2";
+
+type FileState = {
+  studentPublicKeyFile: File | null;
+  studentPrivateKeyFile: File | null;
+  signatureFile: File | null;
+  caPublicKeyFile: File | null;
+  caPrivateKeyFile: File | null;
+  certificateDataFile: File | null;
+  certificateSignatureFile: File | null;
+  messageSignatureFile: File | null;
+};
+
+const initialFiles: FileState = {
+  studentPublicKeyFile: null,
+  studentPrivateKeyFile: null,
+  signatureFile: null,
+  caPublicKeyFile: null,
+  caPrivateKeyFile: null,
+  certificateDataFile: null,
+  certificateSignatureFile: null,
+  messageSignatureFile: null,
+};
 
 export default function HomePage() {
   const [studentId, setStudentId] = useState("");
-  const [publicKey, setPublicKey] = useState("");
-  const [privateKey, setPrivateKey] = useState("");
-  const [signature, setSignature] = useState("");
+  const [taskNumber, setTaskNumber] = useState<TaskNumber>("1");
+  const [files, setFiles] = useState<FileState>(initialFiles);
+
   const [message, setMessage] = useState<string | null>(null);
-  const [messageType, setMessageType] = useState<
-    "success" | "error" | "warning" | null
-  >(null);
+  const [messageType, setMessageType] = useState<MessageType>(null);
   const [loading, setLoading] = useState(false);
 
   const [showConfirmBox, setShowConfirmBox] = useState(false);
   const [previousSubmittedAt, setPreviousSubmittedAt] = useState<string | null>(
     null,
   );
+  const [previousTaskNumber, setPreviousTaskNumber] =
+    useState<TaskNumber | null>(null);
+
+  const formRef = useRef<HTMLFormElement | null>(null);
+
+  const taskLabel = useMemo(
+    () => (taskNumber === "1" ? "Task 1" : "Task 2"),
+    [taskNumber],
+  );
+
+  function setFile<K extends keyof FileState>(key: K, file: File | null) {
+    setFiles((prev) => ({
+      ...prev,
+      [key]: file,
+    }));
+  }
+
+  function resetFiles() {
+    setFiles(initialFiles);
+    if (formRef.current) {
+      formRef.current.reset();
+    }
+  }
+
+  function resetAll() {
+    setStudentId("");
+    setTaskNumber("1");
+    resetFiles();
+  }
+
+  function formatTimestamp(ts: string | null) {
+    if (!ts) return "";
+    return new Date(ts).toLocaleString();
+  }
+
+  function validateBeforeSubmit(): string | null {
+    if (!/^[0-9]{8}$/.test(studentId)) {
+      return "Student ID must be exactly 8 digits.";
+    }
+
+    if (taskNumber === "1") {
+      if (!files.studentPublicKeyFile) {
+        return "Student public key file is required.";
+      }
+      if (!files.studentPrivateKeyFile) {
+        return "Student private key file is required.";
+      }
+      if (!files.signatureFile) {
+        return "Signature file is required.";
+      }
+    }
+
+    if (taskNumber === "2") {
+      if (!files.caPublicKeyFile) {
+        return "CA public key file is required.";
+      }
+      if (!files.caPrivateKeyFile) {
+        return "CA private key file is required.";
+      }
+      if (!files.certificateDataFile) {
+        return "Certificate data file is required.";
+      }
+      if (!files.certificateSignatureFile) {
+        return "Certificate signature file is required.";
+      }
+      if (!files.messageSignatureFile) {
+        return "Message signature file is required.";
+      }
+    }
+
+    return null;
+  }
 
   async function submit(confirmResubmission: boolean) {
+    const formData = new FormData();
+    formData.append("studentId", studentId);
+    formData.append("taskNumber", taskNumber);
+    formData.append(
+      "confirmResubmission",
+      confirmResubmission ? "true" : "false",
+    );
+
+    if (taskNumber === "1") {
+      if (files.studentPublicKeyFile) {
+        formData.append("studentPublicKeyFile", files.studentPublicKeyFile);
+      }
+      if (files.studentPrivateKeyFile) {
+        formData.append("studentPrivateKeyFile", files.studentPrivateKeyFile);
+      }
+      if (files.signatureFile) {
+        formData.append("signatureFile", files.signatureFile);
+      }
+    }
+
+    if (taskNumber === "2") {
+      if (files.caPublicKeyFile) {
+        formData.append("caPublicKeyFile", files.caPublicKeyFile);
+      }
+      if (files.caPrivateKeyFile) {
+        formData.append("caPrivateKeyFile", files.caPrivateKeyFile);
+      }
+      if (files.certificateDataFile) {
+        formData.append("certificateDataFile", files.certificateDataFile);
+      }
+      if (files.certificateSignatureFile) {
+        formData.append(
+          "certificateSignatureFile",
+          files.certificateSignatureFile,
+        );
+      }
+      if (files.messageSignatureFile) {
+        formData.append("messageSignatureFile", files.messageSignatureFile);
+      }
+    }
+
     const res = await fetch("/api/submit", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        studentId,
-        publicKey,
-        privateKey,
-        signature,
-        confirmResubmission,
-      }),
+      body: formData,
     });
 
     const data = await res.json();
@@ -42,30 +171,11 @@ export default function HomePage() {
     setMessageType(null);
     setShowConfirmBox(false);
     setPreviousSubmittedAt(null);
+    setPreviousTaskNumber(null);
 
-    if (!/^[0-9]{8}$/.test(studentId)) {
-      setMessage("Student ID must be exactly 8 digits.");
-      setMessageType("error");
-      setLoading(false);
-      return;
-    }
-
-    if (!publicKey.trim()) {
-      setMessage("Public key is required.");
-      setMessageType("error");
-      setLoading(false);
-      return;
-    }
-
-    if (!privateKey.trim()) {
-      setMessage("Private key is required.");
-      setMessageType("error");
-      setLoading(false);
-      return;
-    }
-
-    if (!signature.trim()) {
-      setMessage("Signature is required.");
+    const validationError = validateBeforeSubmit();
+    if (validationError) {
+      setMessage(validationError);
       setMessageType("error");
       setLoading(false);
       return;
@@ -82,18 +192,20 @@ export default function HomePage() {
 
       if (data.needsConfirmation) {
         setPreviousSubmittedAt(data.previousSubmittedAt ?? null);
+        setPreviousTaskNumber(data.previousTaskNumber === 2 ? "2" : "1");
         setShowConfirmBox(true);
-        setMessage("A previous submission already exists for this student ID.");
+        setMessage(
+          `A previous submission already exists for ${taskLabel.toLowerCase()}.`,
+        );
         setMessageType("warning");
         return;
       }
 
-      setMessage("Submission received.");
+      setMessage(
+        "Submission received at " + formatTimestamp(new Date().toISOString()),
+      );
       setMessageType("success");
-      setStudentId("");
-      setSignature("");
-      setPublicKey("");
-      setPrivateKey("");
+      resetAll();
     } catch {
       setMessage("Network or server error.");
       setMessageType("error");
@@ -118,12 +230,12 @@ export default function HomePage() {
 
       setShowConfirmBox(false);
       setPreviousSubmittedAt(null);
+      setPreviousTaskNumber(null);
       setMessage(
         "Submission received at " + formatTimestamp(new Date().toISOString()),
       );
       setMessageType("success");
-      setStudentId("");
-      setSignature("");
+      resetAll();
     } catch {
       setMessage("Network or server error.");
       setMessageType("error");
@@ -132,15 +244,10 @@ export default function HomePage() {
     }
   }
 
-  function formatTimestamp(ts: string | null) {
-    if (!ts) return "";
-    return new Date(ts).toLocaleString();
-  }
-
   return (
     <main className="min-h-screen bg-[#0b0b0c] text-zinc-100">
       <div className="mx-auto flex min-h-screen max-w-6xl items-center px-6 py-16">
-        <div className="grid w-full gap-10 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="grid w-full gap-10 lg:grid-cols-[1fr_1fr] xl:grid-cols-[1.05fr_0.95fr]">
           <section className="flex flex-col justify-center">
             <div className="max-w-2xl">
               <div className="mb-4 inline-flex rounded-full border border-zinc-800 bg-zinc-900/80 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-zinc-400">
@@ -152,12 +259,13 @@ export default function HomePage() {
               </h1>
 
               <p className="mt-5 max-w-xl text-base leading-7 text-zinc-400 sm:text-lg">
-                Enter your student ID and the computed signature for your quiz
-                task. Your submission will be recorded after validation.
+                Select the quiz task and upload the required files. Your
+                submission will be recorded after validation.
               </p>
 
               <p className="mt-2 text-sm leading-6 text-white">
-                <b>Note:</b> You can submit multiple times. Only the latest submission before the deadline counts.
+                <b>Note:</b> You can submit multiple times. Only the latest
+                submission before the deadline counts for each task.
               </p>
 
               <div className="mt-8 grid max-w-xl gap-4 sm:grid-cols-2">
@@ -172,26 +280,26 @@ export default function HomePage() {
 
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
                   <div className="text-sm font-medium text-zinc-200">
-                    Keys and Signature
+                    Task-based upload
                   </div>
                   <div className="mt-1 text-sm leading-6 text-zinc-400">
-                    Submit both keys and the signature you computed for your
-                    student ID.
+                    Task 1 and Task 2 can be submitted separately.
                   </div>
                 </div>
               </div>
             </div>
           </section>
+
           <section>
             <div className="w-full rounded-3xl border border-zinc-800 bg-zinc-950/90 p-5 shadow-2xl shadow-black/30 sm:p-6">
               <div className="mb-5">
                 <h2 className="text-xl font-semibold text-white">Submit</h2>
                 <p className="mt-2 text-sm leading-6 text-zinc-400">
-                  Fill in all fields exactly as required.
+                  Upload the files required for the selected task.
                 </p>
               </div>
 
-              <form onSubmit={onSubmit} className="space-y-4">
+              <form ref={formRef} onSubmit={onSubmit} className="space-y-3">
                 <div>
                   <label
                     htmlFor="studentId"
@@ -215,66 +323,121 @@ export default function HomePage() {
                   />
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label
-                      htmlFor="publicKey"
-                      className="mb-2 block text-sm font-medium text-zinc-200"
-                    >
-                      Public Key
-                    </label>
-                    <input
-                      id="publicKey"
-                      type="text"
-                      value={publicKey}
-                      onChange={(e) => setPublicKey(e.target.value)}
-                      placeholder="Enter public key"
-                      className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-base text-white outline-none transition placeholder:text-zinc-500 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-600/40"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="privateKey"
-                      className="mb-2 block text-sm font-medium text-zinc-200"
-                    >
-                      Private Key
-                    </label>
-                    <input
-                      id="privateKey"
-                      type="text"
-                      value={privateKey}
-                      onChange={(e) => setPrivateKey(e.target.value)}
-                      placeholder="Enter private key"
-                      className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-base text-white outline-none transition placeholder:text-zinc-500 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-600/40"
-                    />
-                  </div>
-                </div>
-
                 <div>
                   <label
-                    htmlFor="signature"
+                    htmlFor="taskNumber"
                     className="mb-2 block text-sm font-medium text-zinc-200"
                   >
-                    Signature
+                    Task
                   </label>
-                  <input
-                    id="signature"
-                    type="text"
-                    value={signature}
-                    onChange={(e) => setSignature(e.target.value)}
-                    required
-                    placeholder="Enter computed signature"
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-base text-white outline-none transition placeholder:text-zinc-500 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-600/40"
-                  />
+                  <select
+                    id="taskNumber"
+                    value={taskNumber}
+                    onChange={(e) => {
+                      const nextTask = e.target.value === "2" ? "2" : "1";
+                      setTaskNumber(nextTask);
+                      setShowConfirmBox(false);
+                      setPreviousSubmittedAt(null);
+                      setPreviousTaskNumber(null);
+                      setMessage(null);
+                      setMessageType(null);
+                      resetFiles();
+                    }}
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-base text-white outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-600/40"
+                  >
+                    <option value="1">Task 1</option>
+                    <option value="2">Task 2</option>
+                  </select>
                 </div>
+
+                {taskNumber === "1" && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <FileInput
+                      id="studentPublicKeyFile"
+                      label="Student Public Key File"
+                      accept=".pem,.txt"
+                      file={files.studentPublicKeyFile}
+                      onChange={(file) => setFile("studentPublicKeyFile", file)}
+                    />
+
+                    <FileInput
+                      id="studentPrivateKeyFile"
+                      label="Student Private Key File"
+                      accept=".pem,.txt"
+                      file={files.studentPrivateKeyFile}
+                      onChange={(file) =>
+                        setFile("studentPrivateKeyFile", file)
+                      }
+                    />
+
+                    <div className="sm:col-span-2">
+                      <FileInput
+                        id="signatureFile"
+                        label="Signature File"
+                        accept=".sig,.txt,.bin"
+                        file={files.signatureFile}
+                        onChange={(file) => setFile("signatureFile", file)}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {taskNumber === "2" && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <FileInput
+                      id="caPublicKeyFile"
+                      label="CA Public Key File"
+                      accept=".pem,.txt"
+                      file={files.caPublicKeyFile}
+                      onChange={(file) => setFile("caPublicKeyFile", file)}
+                    />
+
+                    <FileInput
+                      id="caPrivateKeyFile"
+                      label="CA Private Key File"
+                      accept=".pem,.txt"
+                      file={files.caPrivateKeyFile}
+                      onChange={(file) => setFile("caPrivateKeyFile", file)}
+                    />
+
+                    <FileInput
+                      id="certificateDataFile"
+                      label="Certificate Data File"
+                      accept=".txt,.json,.bin"
+                      file={files.certificateDataFile}
+                      onChange={(file) => setFile("certificateDataFile", file)}
+                    />
+
+                    <FileInput
+                      id="certificateSignatureFile"
+                      label="Certificate Signature File"
+                      accept=".sig,.txt,.bin"
+                      file={files.certificateSignatureFile}
+                      onChange={(file) =>
+                        setFile("certificateSignatureFile", file)
+                      }
+                    />
+
+                    <div className="sm:col-span-2">
+                      <FileInput
+                        id="messageSignatureFile"
+                        label="Message Signature File"
+                        accept=".sig,.txt,.bin"
+                        file={files.messageSignatureFile}
+                        onChange={(file) =>
+                          setFile("messageSignatureFile", file)
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <button
                   type="submit"
                   disabled={loading}
                   className="w-full rounded-xl bg-white px-4 py-3 text-base font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {loading ? "Submitting..." : "Submit"}
+                  {loading ? "Submitting..." : `Submit ${taskLabel}`}
                 </button>
               </form>
 
@@ -296,6 +459,10 @@ export default function HomePage() {
                 <div className="mt-4 rounded-xl border border-amber-900 bg-amber-950/30 p-4 text-sm text-amber-200">
                   <p className="leading-6">
                     A previous submission already exists for{" "}
+                    <span className="font-semibold">
+                      {previousTaskNumber === "2" ? "Task 2" : "Task 1"}
+                    </span>{" "}
+                    for student ID{" "}
                     <span className="font-semibold">{studentId}</span>
                     {previousSubmittedAt ? (
                       <>
@@ -310,8 +477,8 @@ export default function HomePage() {
                   </p>
 
                   <p className="mt-2 leading-6 text-amber-300">
-                    The latest submission before the deadline counts. Do you
-                    want to submit another response?
+                    The latest submission before the deadline counts for this
+                    task. Do you want to submit another response?
                   </p>
 
                   <div className="mt-4 flex flex-wrap gap-3">
@@ -329,6 +496,7 @@ export default function HomePage() {
                       onClick={() => {
                         setShowConfirmBox(false);
                         setPreviousSubmittedAt(null);
+                        setPreviousTaskNumber(null);
                         setMessage(null);
                         setMessageType(null);
                       }}
@@ -345,5 +513,109 @@ export default function HomePage() {
         </div>
       </div>
     </main>
+  );
+}
+
+function FileInput({
+  id,
+  label,
+  accept,
+  file,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  accept?: string;
+  file: File | null;
+  onChange: (file: File | null) => void;
+}) {
+  const [isDragging, setIsDragging] = useState(false);
+
+  function pickFirstFile(fileList: FileList | null): File | null {
+    return fileList && fileList.length > 0 ? fileList[0] : null;
+  }
+
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragging(true);
+  }
+
+  function handleDragEnter(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      setIsDragging(false);
+    }
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragging(false);
+    onChange(pickFirstFile(e.dataTransfer.files));
+  }
+
+  return (
+    <div>
+      <label
+        htmlFor={id}
+        className="mb-2 block text-sm font-medium text-zinc-200"
+      >
+        {label}
+      </label>
+
+      <div
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`flex min-h-[56px] items-center gap-3 rounded-xl border px-4 py-3 transition ${
+          isDragging
+            ? "border-zinc-400 bg-zinc-800/90 ring-2 ring-zinc-500/30"
+            : "border-zinc-700 bg-zinc-900"
+        }`}
+      >
+        <label
+          htmlFor={id}
+          className="inline-flex shrink-0 cursor-pointer rounded-lg bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-zinc-200"
+        >
+          Choose file
+        </label>
+
+        <div className="min-w-0 flex-1 text-sm text-zinc-300">
+          {file ? (
+            <span className="block truncate" title={file.name}>
+              {file.name}
+            </span>
+          ) : (
+            <span className="text-zinc-500">
+              {isDragging ? "Drop file here" : "No file chosen"}
+            </span>
+          )}
+        </div>
+
+        {file && (
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            className="shrink-0 text-xs text-zinc-400 transition hover:text-white"
+          >
+            Clear
+          </button>
+        )}
+
+        <input
+          id={id}
+          type="file"
+          accept={accept}
+          onChange={(e) => onChange(pickFirstFile(e.target.files))}
+          className="sr-only"
+        />
+      </div>
+    </div>
   );
 }
