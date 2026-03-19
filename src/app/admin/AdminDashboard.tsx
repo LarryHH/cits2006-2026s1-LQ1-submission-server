@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { SubmissionRow } from "./page";
 
 type SortField = "submitted_at" | "student_id" | "task_number";
@@ -15,6 +15,9 @@ type PopoverState = {
   field: string;
   value: string;
   label: string;
+  anchorX: number;
+  anchorTop: number;
+  anchorBottom: number;
   x: number;
   y: number;
 } | null;
@@ -101,6 +104,8 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
   const [sortField, setSortField] = useState<SortField>("submitted_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [popover, setPopover] = useState<PopoverState>(null);
+  const [copied, setCopied] = useState(false);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
 
   const latestByStudentAndTask = useMemo(
     () => getLatestByStudentAndTask(rows),
@@ -193,16 +198,71 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
     value: string,
   ) {
     const rect = e.currentTarget.getBoundingClientRect();
+    const margin = 16;
+    const popoverWidth = 380;
 
+    const x = Math.max(
+      margin,
+      Math.min(rect.left, window.innerWidth - popoverWidth - margin),
+    );
+
+    setCopied(false);
     setPopover({
       rowId,
       field,
       label,
       value,
-      x: Math.min(rect.left, window.innerWidth - 420),
+      anchorX: x,
+      anchorTop: rect.top,
+      anchorBottom: rect.bottom,
+      x,
       y: rect.bottom + 8,
     });
   }
+
+  useLayoutEffect(() => {
+    if (!popover || !popoverRef.current) return;
+
+    const margin = 16;
+    const node = popoverRef.current;
+    const rect = node.getBoundingClientRect();
+
+    let nextX = popover.anchorX;
+    let nextY = popover.anchorBottom + 8;
+
+    if (nextX + rect.width > window.innerWidth - margin) {
+      nextX = window.innerWidth - rect.width - margin;
+    }
+    if (nextX < margin) {
+      nextX = margin;
+    }
+
+    const spaceBelow = window.innerHeight - popover.anchorBottom;
+    const spaceAbove = popover.anchorTop;
+
+    if (spaceBelow < rect.height + 8 && spaceAbove > spaceBelow) {
+      nextY = popover.anchorTop - rect.height - 8;
+    }
+
+    if (nextY + rect.height > window.innerHeight - margin) {
+      nextY = window.innerHeight - rect.height - margin;
+    }
+    if (nextY < margin) {
+      nextY = margin;
+    }
+
+    if (nextX !== popover.x || nextY !== popover.y) {
+      setPopover((prev) =>
+        prev
+          ? {
+              ...prev,
+              x: nextX,
+              y: nextY,
+            }
+          : prev,
+      );
+    }
+  }, [popover]);
 
   function renderPopoverCell(
     label: string,
@@ -231,6 +291,18 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
         </span>
       </button>
     );
+  }
+
+  async function handleCopyPopoverValue() {
+    if (!popover) return;
+
+    try {
+      await navigator.clipboard.writeText(popover.value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
   }
 
   return (
@@ -620,6 +692,7 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
           />
 
           <div
+            ref={popoverRef}
             className="fixed z-50 w-[380px] max-w-[calc(100vw-2rem)] rounded-2xl border border-zinc-700 bg-zinc-950 p-4 shadow-2xl shadow-black/40"
             style={{
               left: popover.x,
@@ -630,13 +703,27 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
               <div className="text-sm font-semibold text-white">
                 {popover.label}
               </div>
-              <button
-                type="button"
-                onClick={() => setPopover(null)}
-                className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800"
-              >
-                Close
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyPopoverValue}
+                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800"
+                >
+                  {copied ? "Copied" : "Copy"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPopover(null);
+                    setCopied(false);
+                  }}
+                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800"
+                >
+                  Close
+                </button>
+              </div>
             </div>
 
             <div className="custom-scrollbar max-h-[320px] overflow-auto rounded-xl border border-zinc-800 bg-zinc-900/70 p-3 font-mono text-sm leading-6 text-zinc-200">
