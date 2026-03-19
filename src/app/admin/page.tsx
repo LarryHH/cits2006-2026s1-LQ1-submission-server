@@ -14,6 +14,7 @@ export type SubmissionRow = {
   submitted_at: string;
   student_id: string;
   task_number: 1 | 2;
+  lab_label: string | null;
   message_prefix_used: string;
   message_used: string;
   is_valid: boolean;
@@ -43,6 +44,7 @@ async function getData(): Promise<SubmissionRow[]> {
         submitted_at,
         student_id,
         task_number,
+        lab_label,
         message_prefix_used,
         message_used,
         is_valid,

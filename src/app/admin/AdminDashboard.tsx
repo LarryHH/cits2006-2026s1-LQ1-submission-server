@@ -6,6 +6,7 @@ import type { SubmissionRow } from "./page";
 type SortField = "submitted_at" | "student_id" | "task_number";
 type SortDir = "asc" | "desc";
 
+type LabFilter = "all" | string;
 type CountFilter = "all" | "counted" | "old";
 type ValidityFilter = "all" | "valid" | "invalid";
 type TaskFilter = "all" | "1" | "2";
@@ -98,6 +99,7 @@ function safeValue(value: string | null | undefined) {
 
 export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
   const [search, setSearch] = useState("");
+  const [labFilter, setLabFilter] = useState<LabFilter>("all");
   const [countFilter, setCountFilter] = useState<CountFilter>("all");
   const [validityFilter, setValidityFilter] = useState<ValidityFilter>("all");
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("all");
@@ -117,6 +119,19 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
     [latestByStudentAndTask],
   );
 
+  const labLabelOptions = useMemo(() => {
+    const labels = Array.from(
+      new Set(
+        rows
+          .map((row) => row.lab_label?.trim())
+          .filter((label): label is string => Boolean(label)),
+      ),
+    );
+
+    labels.sort((a, b) => a.localeCompare(b));
+    return labels;
+  }, [rows]);
+
   const totalSubmissions = rows.length;
   const countedTask1 = countedRows.filter((r) => r.task_number === 1).length;
   const countedTask2 = countedRows.filter((r) => r.task_number === 2).length;
@@ -130,6 +145,10 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
 
     if (q) {
       out = out.filter((row) => row.student_id.includes(q));
+    }
+
+    if (labFilter !== "all") {
+      out = out.filter((row) => row.lab_label === labFilter);
     }
 
     if (taskFilter !== "all") {
@@ -171,6 +190,7 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
   }, [
     rows,
     search,
+    labFilter,
     countFilter,
     validityFilter,
     taskFilter,
@@ -372,6 +392,19 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
 
         <div className="flex flex-wrap items-center gap-3">
           <select
+            value={labFilter}
+            onChange={(e) => setLabFilter(e.target.value)}
+            className="min-w-[170px] rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-600/40"
+          >
+            <option value="all">All labs</option>
+            {labLabelOptions.map((label) => (
+              <option key={label} value={label}>
+                {label}
+              </option>
+            ))}
+          </select>
+
+          <select
             value={taskFilter}
             onChange={(e) => setTaskFilter(e.target.value as TaskFilter)}
             className="min-w-[150px] rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-600/40"
@@ -423,6 +456,10 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
                     Student ID
                     {sortIndicator("student_id", sortField, sortDir)}
                   </button>
+                </th>
+
+                <th className="px-4 py-3 text-left font-medium text-zinc-300">
+                  Lab
                 </th>
 
                 <th className="px-4 py-3 text-left font-medium text-zinc-300">
@@ -525,6 +562,16 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
 
                     <td className="px-4 py-3 font-medium text-white">
                       {row.student_id}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {renderPopoverCell(
+                        "Lab Label",
+                        row.id,
+                        "lab_label",
+                        row.lab_label,
+                        "max-w-[140px]",
+                      )}
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3 text-zinc-300">
@@ -672,7 +719,7 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
               {filteredRows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={17}
+                    colSpan={18}
                     className="px-4 py-10 text-center text-zinc-500"
                   >
                     No matching submissions.

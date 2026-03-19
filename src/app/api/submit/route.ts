@@ -340,6 +340,7 @@ export async function POST(req: NextRequest) {
     const insertPayload = {
       student_id: studentId,
       task_number: taskNumber,
+      lab_label: activeLab.label,
       message_prefix_used: messagePrefix,
       message_used: messageUsed,
       is_valid: verificationResult.isValid,
