@@ -263,6 +263,11 @@ export default function HomePage() {
                 submission will be recorded after validation.
               </p>
 
+              <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-400">
+                The form confirms whether your submission was received, but does
+                not show full correctness feedback.
+              </p>
+
               <p className="mt-2 text-sm leading-6 text-white">
                 <b>Note:</b> You can submit multiple times. Only the latest
                 submission before the deadline counts for each task.
@@ -271,19 +276,20 @@ export default function HomePage() {
               <div className="mt-8 grid max-w-xl gap-4 sm:grid-cols-2">
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
                   <div className="text-sm font-medium text-zinc-200">
-                    Student ID
+                    Task 1 requires
                   </div>
-                  <div className="mt-1 text-sm leading-6 text-zinc-400">
-                    Must be exactly 8 digits.
+                  <div className="mt-2 text-sm leading-6 text-zinc-400">
+                    Student public key, student private key, and signature file.
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
                   <div className="text-sm font-medium text-zinc-200">
-                    Task-based upload
+                    Task 2 requires
                   </div>
-                  <div className="mt-1 text-sm leading-6 text-zinc-400">
-                    Task 1 and Task 2 can be submitted separately.
+                  <div className="mt-2 text-sm leading-6 text-zinc-400">
+                    CA public key, CA private key, certificate data,
+                    certificate signature, and message signature.
                   </div>
                 </div>
               </div>
@@ -330,6 +336,9 @@ export default function HomePage() {
                   >
                     Task
                   </label>
+                  <p className="mb-2 text-xs text-zinc-500">
+                    Select the task you are submitting for.
+                  </p>
                   <select
                     id="taskNumber"
                     value={taskNumber}
@@ -573,7 +582,7 @@ function FileInput({
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`flex min-h-[56px] items-center gap-3 rounded-xl border px-4 py-3 transition ${
+        className={`flex min-h-[52px] items-center gap-3 rounded-xl border px-4 py-2.5 transition ${
           isDragging
             ? "border-zinc-400 bg-zinc-800/90 ring-2 ring-zinc-500/30"
             : "border-zinc-700 bg-zinc-900"
@@ -581,7 +590,7 @@ function FileInput({
       >
         <label
           htmlFor={id}
-          className="inline-flex shrink-0 cursor-pointer rounded-lg bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-zinc-200"
+          className="inline-flex shrink-0 cursor-pointer rounded-md bg-white px-3 py-1.5 text-sm font-medium text-black transition hover:bg-zinc-200"
         >
           Choose file
         </label>

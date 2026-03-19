@@ -23,7 +23,7 @@ export function buildExpectedMessage(
   studentId: string,
 ): Buffer {
   const suffix = getStudentIdSuffix(studentId);
-  return Buffer.from(`${messagePrefix}-${suffix}`, "utf-8");
+  return Buffer.from(`${messagePrefix}${suffix}`, "utf-8");
 }
 
 export type VerificationResult = {

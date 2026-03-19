@@ -420,7 +420,7 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
                 </th>
 
                 <th className="px-4 py-3 text-left font-medium text-zinc-300">
-                  Task 2 Certificate Signature
+                  Submitted Certificate Signature
                 </th>
 
                 <th className="px-4 py-3 text-left font-medium text-zinc-300">
@@ -545,15 +545,13 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
                     </td>
 
                     <td className="px-4 py-3">
-                      {row.task_number === 1 ? (
-                        renderPopoverCell(
-                          "Submitted Signature",
-                          row.id,
-                          "submitted_signature_text",
-                          row.submitted_signature_text,
-                        )
-                      ) : (
-                        <span className="text-zinc-500">—</span>
+                      {renderPopoverCell(
+                        row.task_number === 1
+                          ? "Submitted Signature"
+                          : "Message Signature",
+                        row.id,
+                        "submitted_signature_text",
+                        row.submitted_signature_text,
                       )}
                     </td>
 
