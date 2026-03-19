@@ -337,7 +337,7 @@ function verifyCertificateAgainstCandidates(
 }
 
 function bigIntToBuffer(x: bigint): Buffer {
-  if (x < 0n) {
+  if (x < BigInt(0)) {
     throw new Error("Negative bigint not supported.");
   }
   let hex = x.toString(16);
