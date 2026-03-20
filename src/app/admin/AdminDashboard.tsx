@@ -327,7 +327,7 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
 
   return (
     <>
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-5">
           <div className="text-sm font-medium text-zinc-400">
             Total submissions
@@ -379,7 +379,7 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
         are the latest submissions for each student and task.
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
         <input
           type="text"
           value={search}
@@ -387,7 +387,7 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
             setSearch(e.target.value.replace(/\D/g, "").slice(0, 8))
           }
           placeholder="Search student ID..."
-          className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-600/40"
+          className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-600/40"
         />
 
         <div className="flex flex-wrap items-center gap-3">
