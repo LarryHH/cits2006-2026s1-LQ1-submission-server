@@ -497,10 +497,6 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
                 </th>
 
                 <th className="px-4 py-3 text-left font-medium text-zinc-300">
-                  Message Used
-                </th>
-
-                <th className="px-4 py-3 text-left font-medium text-zinc-300">
                   Student Public Key
                 </th>
 
@@ -521,7 +517,7 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
                 </th>
 
                 <th className="px-4 py-3 text-left font-medium text-zinc-300">
-                  Submitted Signature
+                  Task 1 Submitted Signature
                 </th>
 
                 <th className="px-4 py-3 text-left font-medium text-zinc-300">
@@ -610,16 +606,6 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
 
                     <td className="px-4 py-3">
                       {renderPopoverCell(
-                        "Message Used",
-                        row.id,
-                        "message_used",
-                        row.message_used,
-                        "max-w-[160px]",
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {renderPopoverCell(
                         "Student Public Key",
                         row.id,
                         "student_public_key_pem",
@@ -664,13 +650,15 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
                     </td>
 
                     <td className="px-4 py-3">
-                      {renderPopoverCell(
-                        row.task_number === 1
-                          ? "Submitted Signature"
-                          : "Message Signature",
-                        row.id,
-                        "submitted_signature_text",
-                        row.submitted_signature_text,
+                      {row.task_number === 1 ? (
+                        renderPopoverCell(
+                          "Task 1 Submitted Signature",
+                          row.id,
+                          "submitted_signature_text",
+                          row.submitted_signature_text,
+                        )
+                      ) : (
+                        <span className="text-zinc-500">—</span>
                       )}
                     </td>
 

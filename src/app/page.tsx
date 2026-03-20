@@ -1,17 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 
 type MessageType = "success" | "error" | "warning" | null;
 type TaskNumber = "1" | "2";
-
-type PublicLabSettings = {
-  label: string;
-  task_1_message_prefix: string;
-  task_2_message_prefix: string;
-  opens_at: string;
-  closes_at: string;
-} | null;
 
 type FileState = {
   studentPublicKeyFile: File | null;
@@ -19,9 +11,7 @@ type FileState = {
   signatureFile: File | null;
   caPublicKeyFile: File | null;
   caPrivateKeyFile: File | null;
-  certificateDataFile: File | null;
   certificateSignatureFile: File | null;
-  messageSignatureFile: File | null;
 };
 
 const initialFiles: FileState = {
@@ -30,14 +20,10 @@ const initialFiles: FileState = {
   signatureFile: null,
   caPublicKeyFile: null,
   caPrivateKeyFile: null,
-  certificateDataFile: null,
   certificateSignatureFile: null,
-  messageSignatureFile: null,
 };
 
 export default function HomePage() {
-  const [labSettings, setLabSettings] = useState<PublicLabSettings>(null);
-
   const [studentId, setStudentId] = useState("");
   const [taskNumber, setTaskNumber] = useState<TaskNumber>("1");
   const [files, setFiles] = useState<FileState>(initialFiles);
@@ -109,14 +95,8 @@ export default function HomePage() {
       if (!files.caPrivateKeyFile) {
         return "CA private key file is required.";
       }
-      if (!files.certificateDataFile) {
-        return "Certificate data file is required.";
-      }
       if (!files.certificateSignatureFile) {
         return "Certificate signature file is required.";
-      }
-      if (!files.messageSignatureFile) {
-        return "Message signature file is required.";
       }
     }
 
@@ -151,17 +131,11 @@ export default function HomePage() {
       if (files.caPrivateKeyFile) {
         formData.append("caPrivateKeyFile", files.caPrivateKeyFile);
       }
-      if (files.certificateDataFile) {
-        formData.append("certificateDataFile", files.certificateDataFile);
-      }
       if (files.certificateSignatureFile) {
         formData.append(
           "certificateSignatureFile",
           files.certificateSignatureFile,
         );
-      }
-      if (files.messageSignatureFile) {
-        formData.append("messageSignatureFile", files.messageSignatureFile);
       }
     }
 
@@ -233,7 +207,12 @@ export default function HomePage() {
       const data = await submit(true);
 
       if (!data.ok) {
-        setMessage(data.error ?? "Submission failed.");
+        // setMessage(data.error ?? "Submission failed.");
+        setMessage(
+          data.detail
+            ? `${data.error ?? "Submission failed."} (${data.detail})`
+            : (data.error ?? "Submission failed."),
+        );
         setMessageType("error");
         return;
       }
@@ -253,23 +232,6 @@ export default function HomePage() {
       setLoading(false);
     }
   }
-
-  useEffect(() => {
-    async function loadLabSettings() {
-      try {
-        const res = await fetch("/api/lab-settings");
-        const data = await res.json();
-
-        if (res.ok && data?.ok) {
-          setLabSettings(data.settings ?? null);
-        }
-      } catch {
-        // silently ignore, page can still function without displaying prefixes
-      }
-    }
-
-    loadLabSettings();
-  }, []);
 
   return (
     <main className="min-h-screen bg-[#0b0b0c] text-zinc-100">
@@ -309,30 +271,6 @@ export default function HomePage() {
                 </ul>
               </div>
 
-              {labSettings && (
-                <div className="mt-4 max-w-xl rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 text-sm leading-6 text-zinc-300">
-                  <p>
-                    <span className="font-semibold text-white">
-                      Expected message prefixes:
-                    </span>
-                  </p>
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-zinc-400">
-                    <li className="flex flex-wrap items-center gap-2">
-                      <span>Task 1:</span>
-                      <code className="rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1 font-mono text-sm text-zinc-200">
-                        {labSettings.task_1_message_prefix}
-                      </code>
-                    </li>
-                    <li className="flex flex-wrap items-center gap-2">
-                      <span>Task 2:</span>
-                      <code className="rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1 font-mono text-sm text-zinc-200">
-                        {labSettings.task_2_message_prefix}
-                      </code>
-                    </li>
-                  </ul>
-                </div>
-              )}
-
               <div className="mt-4 max-w-xl rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 text-sm leading-6 text-zinc-300">
                 <p>
                   <span className="font-semibold text-white">
@@ -343,7 +281,6 @@ export default function HomePage() {
                   <li>RSA Key Files: PEM format (.pem)</li>
                   <li>Message Signature File: Binary file (.bin)</li>
                   <li>Certificate Signature File: Signature file (.sig)</li>
-                  <li>Certificate Data File: JSON file (.json)</li>
                 </ul>
               </div>
             </div>
@@ -444,12 +381,8 @@ export default function HomePage() {
                           Upload the CA public key and matching CA private key.
                         </li>
                         <li>
-                          Upload the certificate data file and the corresponding
-                          certificate signature file.
-                        </li>
-                        <li>
-                          Upload the message signature file for the required
-                          Task 2 message.
+                          Upload the certificate signature file produced using
+                          the CA private key.
                         </li>
                       </ul>
                     </>
@@ -490,6 +423,7 @@ export default function HomePage() {
                     </div>
                   </div>
                 )}
+
                 {taskNumber === "2" && (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <FileInput
@@ -510,35 +444,15 @@ export default function HomePage() {
                       onChange={(file) => setFile("caPrivateKeyFile", file)}
                     />
 
-                    <FileInput
-                      id="certificateDataFile"
-                      label="Certificate Data File"
-                      description="The certificate content generated by your program."
-                      accept=".txt,.json,.bin"
-                      file={files.certificateDataFile}
-                      onChange={(file) => setFile("certificateDataFile", file)}
-                    />
-
-                    <FileInput
-                      id="certificateSignatureFile"
-                      label="Certificate Signature File"
-                      description="Signature over the certificate data, produced using the CA private key."
-                      accept=".sig,.txt,.bin"
-                      file={files.certificateSignatureFile}
-                      onChange={(file) =>
-                        setFile("certificateSignatureFile", file)
-                      }
-                    />
-
                     <div className="sm:col-span-2">
                       <FileInput
-                        id="messageSignatureFile"
-                        label="Message Signature File"
-                        description="Signature produced for the required Task 2 message."
+                        id="certificateSignatureFile"
+                        label="Certificate Signature File"
+                        description="Signature over the expected Task 2 certificate, produced using the CA private key."
                         accept=".sig,.txt,.bin"
-                        file={files.messageSignatureFile}
+                        file={files.certificateSignatureFile}
                         onChange={(file) =>
-                          setFile("messageSignatureFile", file)
+                          setFile("certificateSignatureFile", file)
                         }
                       />
                     </div>

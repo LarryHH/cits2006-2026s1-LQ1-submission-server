@@ -9,13 +9,9 @@ import {
 
 export const runtime = "nodejs";
 
-// ADDED: file size limits
 const MAX_KEY_FILE_BYTES = 64 * 1024;
 const MAX_SIGNATURE_FILE_BYTES = 64 * 1024;
-const MAX_CERTIFICATE_FILE_BYTES = 128 * 1024;
 
-// ADDED: short cooldown to reduce rapid spam/hammering without heavily limiting genuine resubmits.
-// Note: this is best-effort only in a serverless environment like Vercel.
 const SUBMISSION_COOLDOWN_MS = 30000;
 const recentSubmissionAttempts = new Map<string, number>();
 
@@ -27,6 +23,10 @@ type ActiveLabSetting = {
   opens_at: string | null;
   closes_at: string | null;
   is_active: boolean;
+};
+
+type PriorTask1Row = {
+  student_public_key_pem: string | null;
 };
 
 function parseBoolean(value: FormDataEntryValue | null): boolean {
@@ -48,7 +48,6 @@ function getFile(formData: FormData, key: string): File | null {
   return value;
 }
 
-// ADDED: friendly file size validator
 function ensureMaxFileSize(file: File, maxBytes: number, label: string) {
   if (file.size > maxBytes) {
     throw new Error(
@@ -67,19 +66,16 @@ function isWithinWindow(
   return true;
 }
 
-// ADDED: small helper for consistent JSON errors
 function badRequest(error: string, status = 400) {
   return NextResponse.json({ ok: false, error }, { status });
 }
 
-// ADDED: derive a simple request identity for cooldown checks
 function getRequestIdentity(req: NextRequest, studentId: string): string {
   const forwardedFor = req.headers.get("x-forwarded-for") ?? "";
   const ip = forwardedFor.split(",")[0]?.trim() || "unknown";
   return `${ip}::${studentId}`;
 }
 
-// ADDED: best-effort short cooldown guard
 function checkCooldown(identity: string, nowMs: number): number | null {
   const lastAttempt = recentSubmissionAttempts.get(identity);
 
@@ -93,7 +89,6 @@ function checkCooldown(identity: string, nowMs: number): number | null {
   return null;
 }
 
-// ADDED: record latest attempt and clean up stale entries
 function recordAttempt(identity: string, nowMs: number) {
   recentSubmissionAttempts.set(identity, nowMs);
 
@@ -122,7 +117,6 @@ export async function POST(req: NextRequest) {
       return badRequest("Task number must be 1 or 2.");
     }
 
-    // ADDED: short cooldown check, applied after student ID/task parse
     const nowMs = Date.now();
     const requestIdentity = getRequestIdentity(req, studentId);
     const remainingCooldownMs = checkCooldown(requestIdentity, nowMs);
@@ -196,21 +190,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (!isWithinWindow(now, activeLab.opens_at, activeLab.closes_at)) {
-      return badRequest(
-        "Submissions are not currently open for the active lab.",
-        403,
-      );
-    }
-
     const messagePrefix =
       taskNumber === 1
         ? activeLab.task_1_message_prefix
         : activeLab.task_2_message_prefix;
 
-    const messageUsed = buildExpectedMessage(messagePrefix, studentId).toString(
-      "utf-8",
-    );
+    const messageUsed =
+      taskNumber === 1
+        ? buildExpectedMessage(messagePrefix, studentId).toString("utf-8")
+        : null;
 
     let verificationResult:
       | Awaited<ReturnType<typeof verifyTask1Submission>>
@@ -233,7 +221,6 @@ export async function POST(req: NextRequest) {
         return badRequest("Signature file is required.");
       }
 
-      // ADDED: file size checks for Task 1 uploads
       try {
         ensureMaxFileSize(
           studentPublicKeyFile,
@@ -266,12 +253,10 @@ export async function POST(req: NextRequest) {
     } else {
       const caPublicKeyFile = getFile(formData, "caPublicKeyFile");
       const caPrivateKeyFile = getFile(formData, "caPrivateKeyFile");
-      const certificateDataFile = getFile(formData, "certificateDataFile");
       const certificateSignatureFile = getFile(
         formData,
         "certificateSignatureFile",
       );
-      const messageSignatureFile = getFile(formData, "messageSignatureFile");
 
       if (!caPublicKeyFile) {
         return badRequest("CA public key file is required.");
@@ -281,19 +266,10 @@ export async function POST(req: NextRequest) {
         return badRequest("CA private key file is required.");
       }
 
-      if (!certificateDataFile) {
-        return badRequest("Certificate data file is required.");
-      }
-
       if (!certificateSignatureFile) {
         return badRequest("Certificate signature file is required.");
       }
 
-      if (!messageSignatureFile) {
-        return badRequest("Message signature file is required.");
-      }
-
-      // ADDED: file size checks for Task 2 uploads
       try {
         ensureMaxFileSize(
           caPublicKeyFile,
@@ -306,19 +282,9 @@ export async function POST(req: NextRequest) {
           "CA private key file",
         );
         ensureMaxFileSize(
-          certificateDataFile,
-          MAX_CERTIFICATE_FILE_BYTES,
-          "Certificate data file",
-        );
-        ensureMaxFileSize(
           certificateSignatureFile,
           MAX_SIGNATURE_FILE_BYTES,
           "Certificate signature file",
-        );
-        ensureMaxFileSize(
-          messageSignatureFile,
-          MAX_SIGNATURE_FILE_BYTES,
-          "Message signature file",
         );
       } catch (error) {
         return badRequest(
@@ -326,14 +292,40 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      const { data: latestTask1, error: latestTask1Error } = await supabase
+        .from("submissions")
+        .select("student_public_key_pem")
+        .eq("student_id", studentId)
+        .eq("task_number", 1)
+        .order("submitted_at", { ascending: false })
+        .limit(1)
+        .maybeSingle<PriorTask1Row>();
+
+      if (latestTask1Error) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "Failed to load the latest Task 1 submission for Task 2 validation.",
+          },
+          { status: 500 },
+        );
+      }
+
+      if (
+        !latestTask1?.student_public_key_pem ||
+        !latestTask1.student_public_key_pem.trim()
+      ) {
+        return badRequest(
+          "Task 2 requires a prior Task 1 submission with a student public key.",
+        );
+      }
+
       verificationResult = await verifyTask2Submission({
         studentId,
-        messagePrefix,
         caPublicKeyFile,
         caPrivateKeyFile,
-        certificateDataFile,
         certificateSignatureFile,
-        messageSignatureFile,
+        studentPublicKeyPemFromTask1: latestTask1.student_public_key_pem,
       });
     }
 
@@ -370,12 +362,11 @@ export async function POST(req: NextRequest) {
 
     if (insertError) {
       return NextResponse.json(
-        { ok: false, error: "Failed to save submission." },
+        { ok: false, detail: insertError.message, error: "Failed to save submission." },
         { status: 500 },
       );
     }
 
-    // ADDED: only record cooldown after a real submission attempt reaches persistence
     recordAttempt(requestIdentity, nowMs);
 
     return NextResponse.json({

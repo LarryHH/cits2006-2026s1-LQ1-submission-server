@@ -372,6 +372,46 @@ export function publicKeyPemFromModulusExponent(n: bigint, e: bigint): string {
   }) as string;
 }
 
+export function modulusExponentFromPublicKeyPem(publicKeyPem: string): {
+  n: bigint;
+  e: bigint;
+} {
+  const key = loadPublicKeyFromPem(publicKeyPem);
+  const jwk = key.export({ format: "jwk" }) as JsonWebKey;
+
+  if (!jwk.n || !jwk.e) {
+    throw new Error(
+      "Failed to extract modulus/exponent from student public key.",
+    );
+  }
+
+  return {
+    n: base64UrlToBigInt(jwk.n),
+    e: base64UrlToBigInt(jwk.e),
+  };
+}
+
+function base64UrlToBigInt(input: string): bigint {
+  const base64 = input.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  const buf = Buffer.from(padded, "base64");
+  const hex = buf.toString("hex");
+  return BigInt(`0x${hex || "0"}`);
+}
+
+export function buildExpectedTask2CertificateBytes(
+  studentId: string,
+  studentPublicKeyPem: string,
+): Buffer {
+  const suffix = getStudentIdSuffix(studentId);
+  const { n, e } = modulusExponentFromPublicKeyPem(studentPublicKeyPem);
+
+  return Buffer.from(
+    `{"e": ${e.toString()}, "n": ${n.toString()}, "student_id": "${suffix}"}`,
+    "utf-8",
+  );
+}
+
 export async function verifyTask1Submission(params: {
   studentId: string;
   messagePrefix: string;
@@ -466,24 +506,18 @@ export async function verifyTask1Submission(params: {
 
 export async function verifyTask2Submission(params: {
   studentId: string;
-  messagePrefix: string;
   caPublicKeyFile: File;
   caPrivateKeyFile: File;
-  certificateDataFile: File;
   certificateSignatureFile: File;
-  messageSignatureFile: File;
+  studentPublicKeyPemFromTask1: string;
 }): Promise<VerificationResult> {
-  let certificateDataText: string | null = null;
-
   try {
     const {
       studentId,
-      messagePrefix,
       caPublicKeyFile,
       caPrivateKeyFile,
-      certificateDataFile,
       certificateSignatureFile,
-      messageSignatureFile,
+      studentPublicKeyPemFromTask1,
     } = params;
 
     if (!isValidStudentId(studentId)) {
@@ -494,21 +528,11 @@ export async function verifyTask2Submission(params: {
       };
     }
 
-    const expectedSuffix = getStudentIdSuffix(studentId);
-
     const caPublicKeyPem = normalizePem(await fileToUtf8(caPublicKeyFile));
     const caPrivateKeyPem = normalizePem(await fileToUtf8(caPrivateKeyFile));
-    const certificateDataBuf = await fileToBuffer(certificateDataFile);
-    certificateDataText = certificateDataBuf.toString("utf-8").trim();
-
     const certSignature = parseSignatureBuffer(
       await fileToBuffer(certificateSignatureFile),
     );
-    const messageSignature = parseSignatureBuffer(
-      await fileToBuffer(messageSignatureFile),
-    );
-
-    const message = buildExpectedMessage(messagePrefix, studentId);
 
     try {
       loadPublicKeyFromPem(caPublicKeyPem);
@@ -536,87 +560,42 @@ export async function verifyTask2Submission(params: {
         verificationStage: "ca_key_pair_match",
         verificationMessage:
           "CA public key does not match the uploaded CA private key.",
+        studentPublicKeyPem: normalizePem(studentPublicKeyPemFromTask1),
         caPublicKeyPem,
         caPrivateKeyPem,
-        expectedTask2CertificateSignatureText: null,
-        certificateDataText,
         certificateSignatureText: bufferPreview(certSignature),
-        submittedSignatureText: bufferPreview(messageSignature),
-        certificateEncodingUsed: null,
-      };
-    }
-
-    const certVerification = verifyCertificateAgainstCandidates(
-      caPublicKeyPem,
-      certificateDataBuf,
-      certSignature,
-    );
-
-    if (!certVerification.ok || !certVerification.parsedCert) {
-      return {
-        isValid: false,
-        verificationStage: "certificate_signature",
-        verificationMessage:
-          "Certificate signature verification failed for all supported certificate encodings.",
-        caPublicKeyPem,
-        certificateDataText,
-        certificateSignatureText: bufferPreview(certSignature),
-        submittedSignatureText: bufferPreview(messageSignature),
-        certificateEncodingUsed: null,
         expectedTask2CertificateSignatureText: null,
       };
     }
 
-    const parsedCert = certVerification.parsedCert;
-
-    const expectedTask2CertificateSignature = certVerification.matchedBytes
-      ? signRsaSha256Pkcs1v15(caPrivateKeyPem, certVerification.matchedBytes)
-      : null;
-
-    if (parsedCert.studentId !== expectedSuffix) {
-      return {
-        isValid: false,
-        verificationStage: "certificate_student_id",
-        verificationMessage:
-          "Certificate student ID does not match submitted student ID.",
-        caPublicKeyPem,
-        caPrivateKeyPem: caPrivateKeyPem,
-        certificateDataText,
-        certificateSignatureText: bufferPreview(certSignature),
-        submittedSignatureText: bufferPreview(messageSignature),
-        certificateEncodingUsed: certVerification.matchedEncoding,
-        expectedTask2CertificateSignatureText: expectedTask2CertificateSignature
-          ? bufferPreview(expectedTask2CertificateSignature)
-          : null,
-      };
-    }
-
-    const studentPublicKeyPem = normalizePem(
-      publicKeyPemFromModulusExponent(parsedCert.n, parsedCert.e),
+    const expectedCertificateBytes = buildExpectedTask2CertificateBytes(
+      studentId,
+      studentPublicKeyPemFromTask1,
     );
 
-    const messageOk = verifyRsaSha256Pkcs1v15(
-      studentPublicKeyPem,
-      message,
-      messageSignature,
+    const expectedTask2CertificateSignature = signRsaSha256Pkcs1v15(
+      caPrivateKeyPem,
+      expectedCertificateBytes,
     );
+
+    const isValid =
+      Buffer.compare(certSignature, expectedTask2CertificateSignature) === 0;
 
     return {
-      isValid: messageOk,
-      verificationStage: "task2_signature",
-      verificationMessage: messageOk
-        ? "Task 2 certificate and signature verified successfully."
-        : "Task 2 message signature verification failed after certificate verification.",
-      studentPublicKeyPem,
+      isValid,
+      verificationStage: "certificate_signature",
+      verificationMessage: isValid
+        ? "Task 2 certificate signature verified successfully."
+        : "Task 2 certificate signature does not match the expected value.",
+      studentPublicKeyPem: normalizePem(studentPublicKeyPemFromTask1),
       caPublicKeyPem,
-      caPrivateKeyPem: caPrivateKeyPem,
-      certificateDataText,
+      caPrivateKeyPem,
+      certificateDataText: expectedCertificateBytes.toString("utf-8"),
       certificateSignatureText: bufferPreview(certSignature),
-      submittedSignatureText: bufferPreview(messageSignature),
-      certificateEncodingUsed: certVerification.matchedEncoding,
-      expectedTask2CertificateSignatureText: expectedTask2CertificateSignature
-        ? bufferPreview(expectedTask2CertificateSignature)
-        : null,
+      expectedTask2CertificateSignatureText: bufferPreview(
+        expectedTask2CertificateSignature,
+      ),
+      certificateEncodingUsed: "json_python_sort_keys_default",
     };
   } catch (error) {
     return {
@@ -624,7 +603,6 @@ export async function verifyTask2Submission(params: {
       verificationStage: "task2_internal",
       verificationMessage: "Task 2 verification failed.",
       rawError: error instanceof Error ? error.message : "Unknown error",
-      certificateDataText: certificateDataText ?? null,
       certificateEncodingUsed: null,
     };
   }
