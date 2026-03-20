@@ -30,6 +30,17 @@ function toDatetimeLocalValue(value: string | null) {
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
 }
 
+function localDatetimeToIso(value: string): string | null {
+  if (!value.trim()) return null;
+
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) {
+    return null;
+  }
+
+  return d.toISOString();
+}
+
 async function parseApiResponse(res: Response) {
   const contentType = res.headers.get("content-type") ?? "";
   const raw = await res.text();
@@ -124,8 +135,8 @@ export default function SettingsForm() {
           label,
           task_1_message_prefix: task1Prefix,
           task_2_message_prefix: task2Prefix,
-          opens_at: opensAt || null,
-          closes_at: closesAt || null,
+          opens_at: localDatetimeToIso(opensAt),
+          closes_at: localDatetimeToIso(closesAt),
           is_active: isActive,
         }),
       });
@@ -150,9 +161,7 @@ export default function SettingsForm() {
       setMessageType("success");
     } catch (error) {
       setMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to save lab settings.",
+        error instanceof Error ? error.message : "Failed to save lab settings.",
       );
       setMessageType("error");
     } finally {
