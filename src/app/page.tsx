@@ -384,6 +384,9 @@ export default function HomePage() {
                           Upload the certificate signature file produced using
                           the CA private key.
                         </li>
+                        <li>
+                          <b>NOTE:</b> Task 2 uses the keys from your <b><i>latest Task 1 submission</i></b> to verify the certificate signature.
+                        </li>
                       </ul>
                     </>
                   )}

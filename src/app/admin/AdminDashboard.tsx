@@ -493,6 +493,10 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
                 </th>
 
                 <th className="px-4 py-3 text-left font-medium text-zinc-300">
+                  Failure Reason
+                </th>
+
+                <th className="px-4 py-3 text-left font-medium text-zinc-300">
                   Prefix Used
                 </th>
 
@@ -592,6 +596,18 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
 
                     <td className="px-4 py-3 text-zinc-300">
                       {stageLabel(row.verification_stage)}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {row.is_valid
+                        ? "-"
+                        : renderPopoverCell(
+                            "Failure Reason",
+                            row.id,
+                            "failure_reason",
+                            row.verification_message,
+                            "max-w-[130px]",
+                          )}
                     </td>
 
                     <td className="px-4 py-3">
