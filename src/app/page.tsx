@@ -280,7 +280,7 @@ export default function HomePage() {
                 <ul className="mt-2 list-disc space-y-1 pl-5 text-zinc-400">
                   <li>RSA Key Files: PEM format (.pem)</li>
                   <li>Message Signature File: Binary file (.bin)</li>
-                  <li>Certificate Signature File: Signature file (.sig)</li>
+                  <li>Certificate Signature File: Signature file (.sig or .bin)</li>
                 </ul>
               </div>
             </div>
