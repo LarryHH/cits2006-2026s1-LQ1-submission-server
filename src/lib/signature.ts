@@ -444,21 +444,29 @@ export async function verifyTask1Submission(params: {
 
     try {
       loadPublicKeyFromPem(publicKeyPem);
-    } catch {
+    } catch (error) {
       return {
         isValid: false,
         verificationStage: "student_public_key_parse",
         verificationMessage: "Failed to parse student public key PEM.",
+        rawError: error instanceof Error ? error.message : "Unknown error",
+        studentPublicKeyPem: publicKeyPem,
+        studentPrivateKeyPem: privateKeyPem,
+        submittedSignatureText: bufferPreview(signature),
       };
     }
 
     try {
       loadPrivateKeyFromPem(privateKeyPem);
-    } catch {
+    } catch (error) {
       return {
         isValid: false,
         verificationStage: "student_private_key_parse",
         verificationMessage: "Failed to parse student private key PEM.",
+        rawError: error instanceof Error ? error.message : "Unknown error",
+        studentPublicKeyPem: publicKeyPem,
+        studentPrivateKeyPem: privateKeyPem,
+        submittedSignatureText: bufferPreview(signature),
       };
     }
 
@@ -536,23 +544,38 @@ export async function verifyTask2Submission(params: {
 
     try {
       loadPublicKeyFromPem(caPublicKeyPem);
-    } catch {
+    } catch (error) {
       return {
         isValid: false,
         verificationStage: "ca_public_key_parse",
         verificationMessage: "Failed to parse CA public key PEM.",
+        rawError: error instanceof Error ? error.message : "Unknown error",
+        studentPublicKeyPem: normalizePem(studentPublicKeyPemFromTask1),
+        caPublicKeyPem,
+        caPrivateKeyPem,
+        certificateSignatureText: bufferPreview(certSignature),
       };
     }
 
     try {
       loadPrivateKeyFromPem(caPrivateKeyPem);
-    } catch {
+    } catch (error) {
       return {
         isValid: false,
         verificationStage: "ca_private_key_parse",
         verificationMessage: "Failed to parse CA private key PEM.",
+        rawError: error instanceof Error ? error.message : "Unknown error",
+        studentPublicKeyPem: normalizePem(studentPublicKeyPemFromTask1),
+        caPublicKeyPem,
+        caPrivateKeyPem,
+        certificateSignatureText: bufferPreview(certSignature),
       };
     }
+
+    const expectedCertificateBytes = buildExpectedTask2CertificateBytes(
+      studentId,
+      studentPublicKeyPemFromTask1,
+    );
 
     if (!publicKeyMatchesPrivateKey(caPublicKeyPem, caPrivateKeyPem)) {
       return {
@@ -563,15 +586,12 @@ export async function verifyTask2Submission(params: {
         studentPublicKeyPem: normalizePem(studentPublicKeyPemFromTask1),
         caPublicKeyPem,
         caPrivateKeyPem,
+        certificateDataText: expectedCertificateBytes.toString("utf-8"),
         certificateSignatureText: bufferPreview(certSignature),
         expectedTask2CertificateSignatureText: null,
+        certificateEncodingUsed: "json_python_sort_keys_default",
       };
     }
-
-    const expectedCertificateBytes = buildExpectedTask2CertificateBytes(
-      studentId,
-      studentPublicKeyPemFromTask1,
-    );
 
     const expectedTask2CertificateSignature = signRsaSha256Pkcs1v15(
       caPrivateKeyPem,
