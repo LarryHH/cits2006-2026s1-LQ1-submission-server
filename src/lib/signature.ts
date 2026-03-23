@@ -15,7 +15,7 @@ export function getStudentIdSuffix(studentId: string): string {
   if (!isValidStudentId(studentId)) {
     throw new Error("Student ID must be exactly 8 digits.");
   }
-  return studentId.slice(-4);
+  return studentId;
 }
 
 export function buildExpectedMessage(
