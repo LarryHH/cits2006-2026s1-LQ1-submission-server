@@ -97,6 +97,11 @@ function safeValue(value: string | null | undefined) {
   return value ?? "";
 }
 
+function csvEscape(value: unknown) {
+  const stringValue = value == null ? "" : String(value);
+  return `"${stringValue.replace(/"/g, '""')}"`;
+}
+
 export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
   const [search, setSearch] = useState("");
   const [labFilter, setLabFilter] = useState<LabFilter>("all");
@@ -208,6 +213,79 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
         field === "student_id" || field === "task_number" ? "asc" : "desc",
       );
     }
+  }
+
+  function exportToCsv() {
+    const headers = [
+      "counted_status",
+      "id",
+      "submitted_at",
+      "student_id",
+      "task_number",
+      "task_label",
+      "lab_label",
+      "message_prefix_used",
+      "is_valid",
+      "verification_stage",
+      "verification_stage_label",
+      "verification_message",
+      "raw_error",
+      "student_public_key_pem",
+      "ca_public_key_pem",
+      "student_private_key_pem",
+      "ca_private_key_pem",
+      "expected_task1_signature_text",
+      "expected_task2_certificate_signature_text",
+      "certificate_data_text",
+      "submitted_signature_text",
+      "certificate_signature_text",
+      "certificate_encoding_used",
+    ];
+
+    const csvRows = filteredRows.map((row) => {
+      const countedRow = latestByStudentAndTask.get(countedKey(row));
+      const isCounted = countedRow?.id === row.id;
+
+      return [
+        isCounted ? "Counted" : "Old",
+        row.id,
+        row.submitted_at,
+        row.student_id,
+        row.task_number,
+        taskLabel(row.task_number),
+        row.lab_label,
+        row.message_prefix_used,
+        row.is_valid,
+        row.verification_stage,
+        stageLabel(row.verification_stage),
+        row.verification_message,
+        row.raw_error,
+        row.student_public_key_pem,
+        row.ca_public_key_pem,
+        row.student_private_key_pem,
+        row.ca_private_key_pem,
+        row.expected_task1_signature_text,
+        row.expected_task2_certificate_signature_text,
+        row.certificate_data_text,
+        row.submitted_signature_text,
+        row.certificate_signature_text,
+        row.certificate_encoding_used,
+      ].map(csvEscape);
+    });
+
+    const csv = [headers.map(csvEscape).join(","), ...csvRows.map((r) => r.join(","))].join("\n");
+
+    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `submissions-export-${timestamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   function openPopover(
@@ -435,6 +513,15 @@ export default function AdminDashboard({ rows }: { rows: SubmissionRow[] }) {
             <option value="valid">Valid only</option>
             <option value="invalid">Invalid only</option>
           </select>
+
+          <button
+            type="button"
+            onClick={exportToCsv}
+            disabled={filteredRows.length === 0}
+            className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Export CSV
+          </button>
         </div>
       </div>
 
